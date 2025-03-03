@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	rpc               = "<REPLACE_WITH_RPC_URL>"     // RPC endpoint.
-	privateKeyString  = "<REPLACE_WITH_PRIVATE_KEY>" // Private key without 0x prefix.
-	fromAddressString = "<REPLACE_WITH_FROM_ADDRESS" // From address.
+	rpc               = "REPLACE_WITH_RPC_URL"      // RPC endpoint.
+	privateKeyString  = "REPLACE_WITH_PRIVATE_KEY"  // Private key without 0x prefix.
+	fromAddressString = "REPLACE_WITH_FROM_ADDRESS" // From address.
 )
 
 func main() {
@@ -156,6 +156,6 @@ func initGasEstimator(lggr logger.Logger, client *clientwrappers.GethClient, cha
 		return nil, err
 	}
 	// Committing a synchronization sin for the purposes of this test to make sure the estimator has up-to-date prices.
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	return estimator, nil
 }

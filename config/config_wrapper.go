@@ -135,7 +135,7 @@ func (g GasEstimator) LimitJobType() config.LimitJobType {
 // -------------------------------
 func (g GasEstimator) FeeHistory() config.FeeHistory {
 	return &FeeHistory{
-		CacheTimeoutF: 15 * time.Second,
+		CacheTimeoutF: 5 * time.Second,
 	}
 }
 
