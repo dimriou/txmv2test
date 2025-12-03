@@ -1,13 +1,17 @@
 package config
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/smartcontractkit/chainlink/v2/core/chains/evm/assets"
-	"github.com/smartcontractkit/chainlink/v2/core/chains/evm/config"
-	"github.com/smartcontractkit/chainlink/v2/core/chains/evm/config/toml"
-	"github.com/smartcontractkit/chainlink/v2/core/chains/evm/types"
+	tomldecode "github.com/pelletier/go-toml/v2"
+
+	"github.com/smartcontractkit/chainlink-evm/pkg/assets"
+	"github.com/smartcontractkit/chainlink-evm/pkg/config"
+	"github.com/smartcontractkit/chainlink-evm/pkg/config/toml"
+	"github.com/smartcontractkit/chainlink-evm/pkg/types"
 )
 
 // This wrapper is required because of the way Gas Estimator components expect configs.
@@ -31,6 +35,9 @@ type GasEstimator struct {
 	PriceMinF           *assets.Wei
 	ModeF               string
 	EstimateLimitF      bool
+	SenderAddressF      *types.EIP55Address
+	FeeHistoryF         *FeeHistory
+	BlockHistoryF       *BlockHistory
 }
 
 func (g GasEstimator) PriceMaxKey(common.Address) *assets.Wei {
@@ -45,63 +52,67 @@ func (b GasEstimator) BumpPercent() uint16 {
 	return b.BumpPercentF
 }
 
-func (b GasEstimator) BumpThreshold() uint64 {
-	return b.BumpThresholdF
+func (g GasEstimator) BumpThreshold() uint64 {
+	return g.BumpThresholdF
 }
 
-func (b GasEstimator) BumpTxDepth() uint32 {
-	return b.BumpTxDepthF
+func (g GasEstimator) BumpTxDepth() uint32 {
+	return g.BumpTxDepthF
 }
-func (b GasEstimator) BumpMin() *assets.Wei {
-	return b.BumpMinF
-}
-
-func (b GasEstimator) TipCapMin() *assets.Wei {
-	return b.TipCapMinF
+func (g GasEstimator) BumpMin() *assets.Wei {
+	return g.BumpMinF
 }
 
-func (b GasEstimator) PriceMax() *assets.Wei {
-	return b.PriceMaxF
+func (g GasEstimator) TipCapMin() *assets.Wei {
+	return g.TipCapMinF
 }
 
-func (b GasEstimator) PriceMin() *assets.Wei {
-	return b.PriceMinF
+func (g GasEstimator) PriceMax() *assets.Wei {
+	return g.PriceMaxF
 }
 
-func (b GasEstimator) Mode() string {
-	return b.ModeF
+func (g GasEstimator) PriceMin() *assets.Wei {
+	return g.PriceMinF
 }
 
-func (b GasEstimator) PriceDefault() *assets.Wei {
-	return b.PriceDefaultF
+func (g GasEstimator) Mode() string {
+	return g.ModeF
 }
 
-func (b GasEstimator) TipCapDefault() *assets.Wei {
-	return b.TipCapDefaultF
+func (g GasEstimator) PriceDefault() *assets.Wei {
+	return g.PriceDefaultF
 }
 
-func (b GasEstimator) FeeCapDefault() *assets.Wei {
-	return b.FeeCapDefaultF
+func (g GasEstimator) TipCapDefault() *assets.Wei {
+	return g.TipCapDefaultF
 }
 
-func (b GasEstimator) LimitDefault() uint64 {
-	return b.LimitDefaultF
+func (g GasEstimator) FeeCapDefault() *assets.Wei {
+	return g.FeeCapDefaultF
 }
 
-func (b GasEstimator) LimitMax() uint64 {
-	return b.LimitMaxF
+func (g GasEstimator) LimitDefault() uint64 {
+	return g.LimitDefaultF
 }
 
-func (b GasEstimator) LimitMultiplier() float32 {
-	return b.LimitMultiplierF
+func (g GasEstimator) LimitMax() uint64 {
+	return g.LimitMaxF
 }
 
-func (b GasEstimator) LimitTransfer() uint64 {
-	return b.LimitTransferF
+func (g GasEstimator) LimitMultiplier() float32 {
+	return g.LimitMultiplierF
 }
 
-func (b GasEstimator) EstimateLimit() bool {
-	return b.EstimateLimitF
+func (g GasEstimator) LimitTransfer() uint64 {
+	return g.LimitTransferF
+}
+
+func (g GasEstimator) EstimateLimit() bool {
+	return g.EstimateLimitF
+}
+
+func (g GasEstimator) SenderAddress() *types.EIP55Address {
+	return g.SenderAddressF
 }
 
 // -------------------------------
@@ -134,9 +145,7 @@ func (g GasEstimator) LimitJobType() config.LimitJobType {
 
 // -------------------------------
 func (g GasEstimator) FeeHistory() config.FeeHistory {
-	return &FeeHistory{
-		CacheTimeoutF: 5 * time.Second,
-	}
+	return g.FeeHistoryF
 }
 
 type FeeHistory struct {
@@ -149,10 +158,7 @@ func (b FeeHistory) CacheTimeout() time.Duration {
 
 // -------------------------------
 func (g GasEstimator) BlockHistory() config.BlockHistory {
-	return &BlockHistory{
-		BlockHistorySizeF:      4,
-		TransactionPercentileF: 55,
-	}
+	return g.BlockHistoryF
 }
 
 type BlockHistory struct {
@@ -191,4 +197,52 @@ func (b BlockHistory) EIP1559FeeCapBufferBlocks() uint16 {
 
 func (b BlockHistory) TransactionPercentile() uint16 {
 	return b.TransactionPercentileF
+}
+
+// AppConfig holds the application configuration loaded from TOML and environment variables
+type AppConfig struct {
+	RPC         string `toml:"rpc"`
+	PrivateKey  string `toml:"private_key"`
+	FromAddress string `toml:"from_address"`
+}
+
+// LoadAppConfig loads the application configuration from a TOML file and environment variables.
+// Environment variables take precedence over TOML values.
+// If configPath is empty, it defaults to "config.toml"
+func LoadAppConfig(configPath string) (*AppConfig, error) {
+	if configPath == "" {
+		configPath = "env.toml"
+	}
+
+	cfg := &AppConfig{}
+
+	// Read TOML file if it exists
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	if err == nil {
+		if err := tomldecode.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse TOML config: %w", err)
+		}
+	}
+
+	if envRPC := os.Getenv("RPC"); envRPC != "" {
+		cfg.RPC = envRPC
+	} else {
+		return nil, fmt.Errorf("RPC is required (set in env.toml)")
+	}
+	if envPrivateKey := os.Getenv("PRIVATE_KEY"); envPrivateKey != "" {
+		cfg.PrivateKey = envPrivateKey
+	} else {
+		return nil, fmt.Errorf("PRIVATE_KEY is required (set in env.toml)")
+	}
+	if envFromAddress := os.Getenv("FROM_ADDRESS"); envFromAddress != "" {
+		cfg.FromAddress = envFromAddress
+	} else {
+		return nil, fmt.Errorf("FROM_ADDRESS is required (set in env.toml)")
+	}
+
+	return cfg, nil
 }
