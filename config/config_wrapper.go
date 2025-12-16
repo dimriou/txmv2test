@@ -228,21 +228,5 @@ func LoadAppConfig(configPath string) (*AppConfig, error) {
 		}
 	}
 
-	if envRPC := os.Getenv("RPC"); envRPC != "" {
-		cfg.RPC = envRPC
-	} else {
-		return nil, fmt.Errorf("RPC is required (set in env.toml)")
-	}
-	if envPrivateKey := os.Getenv("PRIVATE_KEY"); envPrivateKey != "" {
-		cfg.PrivateKey = envPrivateKey
-	} else {
-		return nil, fmt.Errorf("PRIVATE_KEY is required (set in env.toml)")
-	}
-	if envFromAddress := os.Getenv("FROM_ADDRESS"); envFromAddress != "" {
-		cfg.FromAddress = envFromAddress
-	} else {
-		return nil, fmt.Errorf("FROM_ADDRESS is required (set in env.toml)")
-	}
-
 	return cfg, nil
 }
